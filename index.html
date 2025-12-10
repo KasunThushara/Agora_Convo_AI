@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agora AI Voice Chat</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 500px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .status {
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            font-weight: 500;
+            text-align: center;
+        }
+
+        .status.idle {
+            background: #f0f0f0;
+            color: #666;
+        }
+
+        .status.connecting {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        button {
+            flex: 1;
+            padding: 15px 30px;
+            font-size: 16px;
+            font-weight: 600;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .start-btn {
+            background: #667eea;
+            color: white;
+        }
+
+        .start-btn:hover:not(:disabled) {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .stop-btn {
+            background: #dc3545;
+            color: white;
+        }
+
+        .stop-btn:hover:not(:disabled) {
+            background: #c82333;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(220, 53, 69, 0.4);
+        }
+
+        .info-box {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            font-size: 13px;
+            color: #666;
+            line-height: 1.6;
+        }
+
+        .info-box strong {
+            color: #333;
+        }
+
+        .info-box code {
+            background: #e9ecef;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+
+        .log {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+
+        .log-entry {
+            margin-bottom: 5px;
+            color: #666;
+        }
+
+        .log-entry.error {
+            color: #dc3545;
+            font-weight: bold;
+        }
+
+        .log-entry.success {
+            color: #28a745;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎙️ AI Voice Chat</h1>
+        <p class="subtitle">Talk to an AI assistant using voice</p>
+
+        <div id="status" class="status idle">
+            Loading...
+        </div>
+
+        <div class="button-group">
+            <button id="startBtn" class="start-btn" disabled>Start Conversation</button>
+            <button id="stopBtn" class="stop-btn" disabled>Stop Conversation</button>
+        </div>
+
+
+        <div class="log" id="log"></div>
+    </div>
+
+    <!-- Agora RTC SDK - Using CDN -->
+    <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
+
+    <script>
+        // ===== WAIT FOR SDK TO LOAD =====
+        (function() {
+            let checkCount = 0;
+            const maxChecks = 50; // 5 seconds max wait
+
+            function checkAgoraLoaded() {
+                checkCount++;
+
+                if (typeof AgoraRTC !== 'undefined') {
+                    // SDK loaded successfully
+                    console.log('✅ Agora SDK loaded');
+                    initApp();
+                } else if (checkCount < maxChecks) {
+                    // Keep checking
+                    setTimeout(checkAgoraLoaded, 100);
+                } else {
+                    // Failed to load
+                    showError('Failed to load Agora SDK. Please check your internet connection and refresh the page.');
+                }
+            }
+
+            function showError(message) {
+                const statusDiv = document.getElementById('status');
+                const logDiv = document.getElementById('log');
+                statusDiv.textContent = '❌ ' + message;
+                statusDiv.className = 'status error';
+
+                const entry = document.createElement('div');
+                entry.className = 'log-entry error';
+                entry.textContent = `[ERROR] ${message}`;
+                logDiv.appendChild(entry);
+            }
+
+            // Start checking when DOM is ready
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', checkAgoraLoaded);
+            } else {
+                checkAgoraLoaded();
+            }
+        })();
+
+        // ===== MAIN APPLICATION =====
+        function initApp() {
+            // ===== CONFIGURATION =====
+            const CONFIG = {
+                appId: "550749b706214846a1a2eef3612a8cd3",
+                channel: "test",
+                token: "007eJxTYIjZF1xaV7tK/t/PmwpNHN+yvRU4X13PdPgi6DNlm0ZylpsCg6mpgbmJZZK5gZmRoYmFiVmiYaJRamqasZmhUaJFcorxDHbLzIZARobXP+awMjJAIIjPwlCSWlzCwAAAFbAe0Q==",
+                userUid: "1002", // Must match remote_rtc_uids in your Python script
+                aiAgentUid: "1001" // Must match agent_rtc_uid in your Python script
+            };
+
+            // ===== STATE =====
+            let client = null;
+            let localAudioTrack = null;
+            let isConnected = false;
+
+            // ===== DOM ELEMENTS =====
+            const startBtn = document.getElementById('startBtn');
+            const stopBtn = document.getElementById('stopBtn');
+            const statusDiv = document.getElementById('status');
+            const logDiv = document.getElementById('log');
+
+            // ===== LOGGING =====
+            function log(message, type = 'info') {
+                const entry = document.createElement('div');
+                entry.className = `log-entry ${type}`;
+                entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+                logDiv.appendChild(entry);
+                logDiv.scrollTop = logDiv.scrollHeight;
+                console.log(message);
+            }
+
+            function updateStatus(message, type = 'idle') {
+                statusDiv.textContent = message;
+                statusDiv.className = `status ${type}`;
+            }
+
+            // ===== JOIN CHANNEL =====
+            async function joinChannel() {
+                try {
+                    updateStatus('Connecting...', 'connecting');
+                    log('Initializing Agora client...', 'info');
+
+                    // Create Agora client
+                    client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
+
+                    // Set up event listeners
+                    client.on("user-published", async (user, mediaType) => {
+                        log(`User ${user.uid} published ${mediaType}`, 'info');
+
+                        // Subscribe to the remote user
+                        await client.subscribe(user, mediaType);
+
+                        if (mediaType === "audio") {
+                            const remoteAudioTrack = user.audioTrack;
+                            remoteAudioTrack.play();
+                            log(`Playing audio from user ${user.uid} (AI Agent)`, 'success');
+                        }
+                    });
+
+                    client.on("user-unpublished", (user, mediaType) => {
+                        log(`User ${user.uid} unpublished ${mediaType}`, 'info');
+                    });
+
+                    client.on("user-joined", (user) => {
+                        log(`User ${user.uid} joined the channel`, 'info');
+                    });
+
+                    client.on("user-left", (user) => {
+                        log(`User ${user.uid} left the channel`, 'info');
+                    });
+
+                    // Join the channel
+                    log(`Joining channel: ${CONFIG.channel}`, 'info');
+                    await client.join(
+                        CONFIG.appId,
+                        CONFIG.channel,
+                        CONFIG.token,
+                        parseInt(CONFIG.userUid)
+                    );
+                    log('Successfully joined channel', 'success');
+
+                    // Create and publish local audio track
+                    log('Creating microphone track...', 'info');
+                    localAudioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+
+                    log('Publishing audio track...', 'info');
+                    await client.publish([localAudioTrack]);
+                    log('Audio track published - You can now speak!', 'success');
+
+                    isConnected = true;
+                    updateStatus('🎙️ Connected - Speak now!', 'connected');
+
+                    startBtn.disabled = true;
+                    stopBtn.disabled = false;
+
+                } catch (error) {
+                    log(`Error joining channel: ${error.message}`, 'error');
+                    updateStatus('Connection failed', 'error');
+                    startBtn.disabled = false;
+                    throw error;
+                }
+            }
+
+            // ===== LEAVE CHANNEL =====
+            async function leaveChannel() {
+                try {
+                    log('Leaving channel...', 'info');
+
+                    if (localAudioTrack) {
+                        localAudioTrack.close();
+                        localAudioTrack = null;
+                    }
+
+                    if (client) {
+                        await client.leave();
+                        client = null;
+                    }
+
+                    isConnected = false;
+                    updateStatus('Disconnected', 'idle');
+                    log('Left channel successfully', 'success');
+
+                    startBtn.disabled = false;
+                    stopBtn.disabled = true;
+
+                } catch (error) {
+                    log(`Error leaving channel: ${error.message}`, 'error');
+                }
+            }
+
+            // ===== BUTTON HANDLERS =====
+            startBtn.addEventListener('click', async () => {
+                try {
+                    startBtn.disabled = true;
+
+                    log('⚠️ Make sure join_api.py is running with the AI agent started!', 'info');
+                    await joinChannel();
+
+                } catch (error) {
+                    startBtn.disabled = false;
+                    updateStatus('Failed to start', 'error');
+                }
+            });
+
+            stopBtn.addEventListener('click', async () => {
+                try {
+                    stopBtn.disabled = true;
+                    await leaveChannel();
+                    log('💡 Remember to run stop_api.py to stop the AI agent!', 'info');
+                } catch (error) {
+                    stopBtn.disabled = false;
+                }
+            });
+
+            // ===== CLEANUP ON PAGE CLOSE =====
+            window.addEventListener('beforeunload', async () => {
+                if (isConnected) {
+                    await leaveChannel();
+                }
+            });
+
+            // ===== INITIAL SETUP =====
+            updateStatus('Ready to connect', 'idle');
+            startBtn.disabled = false;
+            log('✅ Application ready. Make sure to run join_api.py first!', 'success');
+        }
+    </script>
+</body>
+</html>
