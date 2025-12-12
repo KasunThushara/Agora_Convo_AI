@@ -1,5 +1,5 @@
 # join_api.py
-# Start the conversational AI agent
+# Start the conversational AI agent with RAG server
 
 import base64
 import requests
@@ -26,10 +26,21 @@ headers = {
 }
 
 # ==========================
+# RAG SERVER CONFIGURATION
+# ==========================
+# Change this to your RAG server URL
+# If running locally: http://localhost:8000/rag/chat/completions
+# If deployed: https://your-server.com/rag/chat/completions
+RAG_SERVER_URL = "https://noncontingently-stotious-edris.ngrok-free.dev/rag/chat/completions"
+
+# Set to True to use RAG, False to use direct Groq
+USE_RAG = True
+
+# ==========================
 # Request Body
 # ==========================
 payload = {
-    "name": "test_agent_01",
+    "name": "rag_agent_01",
     "properties": {
         "channel": CHANNEL_NAME,
         "token": AGORA_TEMP_TOKEN,
@@ -41,10 +52,11 @@ payload = {
             "enable_aivad": True
         },
 
-        # ========= LLM (Groq) ==========
+        # ========= LLM Configuration ==========
         "llm": {
-            "url": "https://api.groq.com/openai/v1/chat/completions",
-            "api_key": GROQ_KEY,
+            # Use RAG server if enabled, otherwise use Groq directly
+            "url": RAG_SERVER_URL if USE_RAG else "https://api.groq.com/openai/v1/chat/completions",
+            "api_key": "" if USE_RAG else GROQ_KEY,  # RAG server handles API key
             "system_messages": [
                 {
                     "role": "system",
@@ -83,18 +95,21 @@ payload = {
 # ==========================
 # SEND REQUEST
 # ==========================
-print("=" * 50)
-print("🚀 Starting AI Agent...")
-print("=" * 50)
+print("=" * 60)
+print("🚀 Starting AI Agent with RAG")
+print("=" * 60)
 print(f"Channel: {CHANNEL_NAME}")
 print(f"Agent UID: {AGENT_RTC_UID}")
 print(f"User UID: {USER_RTC_UID}")
-print("=" * 50)
+print(f"RAG Mode: {'ENABLED ✅' if USE_RAG else 'DISABLED ❌'}")
+if USE_RAG:
+    print(f"RAG Server: {RAG_SERVER_URL}")
+print("=" * 60)
 
 response = requests.post(url, headers=headers, data=json.dumps(payload))
 
 print("\n📊 Response:")
-print("-" * 50)
+print("-" * 60)
 print("Status Code:", response.status_code)
 
 if response.status_code == 200:
@@ -103,10 +118,15 @@ if response.status_code == 200:
     print(f"Agent ID: {result['agent_id']}")
     print(f"Status: {result['status']}")
     print(f"Created: {result['create_ts']}")
-    print("\n" + "=" * 50)
+    print("\n" + "=" * 60)
     print("⚠️  SAVE THIS AGENT ID FOR STOPPING:")
     print(f"   {result['agent_id']}")
-    print("=" * 50)
+    print("=" * 60)
+
+    if USE_RAG:
+        print("\n💡 RAG is ACTIVE!")
+        print("   The AI will answer based on my_city_info.txt")
+        print("   Try asking: 'Tell me about Shibuya in Tokyo'")
 else:
     print("\n❌ FAILED!")
     try:
