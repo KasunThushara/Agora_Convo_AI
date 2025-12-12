@@ -37,7 +37,7 @@ GREETING_MESSAGE = "Hello, how can I assist you?"
 FAILURE_MESSAGE = "Please hold on a second."
 
 # LLM Model
-LLM_MODEL = "openai/gpt-oss-20b"
+LLM_MODEL = "llama-3.3-70b-versatile"
 
 # TTS Voice
 TTS_MODEL = "playai-tts"
